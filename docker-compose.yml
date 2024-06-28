@@ -7,6 +7,8 @@ services:
     container_name: zookeeper-1
     networks:
       - kafka-cluster
+    ports:
+      - "2181:2181"
     environment:
       ZOOKEEPER_SERVER_ID: 1
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -43,84 +45,85 @@ services:
       ZOOKEEPER_SYNC_LIMIT: 2
       ZOOKEEPER_SERVERS: "zookeeper-1:2888:3888;zookeeper-2:2888:3888;zookeeper-3:2888:3888"
 
-  broker-1:
+  kafka-1:
     image: confluentinc/cp-kafka:7.3.0
-    hostname: broker-1
-    container_name: broker-1
+    hostname: kafka-1
+    container_name: kafka-1
     networks:
       - kafka-cluster
+    depends_on:
+      - zookeeper-1
+      - zookeeper-2
+      - zookeeper-3
     ports:
       - "9092:9092"
-    depends_on:
-      - zookeeper-1
-      - zookeeper-2
-      - zookeeper-3
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker-1:9092,PLAINTEXT_INTERNAL://broker-1:29092
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
 
-  broker-2:
+  kafka-2:
     image: confluentinc/cp-kafka:7.3.0
-    hostname: broker-2
-    container_name: broker-2
+    hostname: kafka-2
+    container_name: kafka-2
     networks:
       - kafka-cluster
+    depends_on:
+      - zookeeper-1
+      - zookeeper-2
+      - zookeeper-3
     ports:
       - "9093:9093"
-    depends_on:
-      - zookeeper-1
-      - zookeeper-2
-      - zookeeper-3
     environment:
       KAFKA_BROKER_ID: 2
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker-2:9093,PLAINTEXT_INTERNAL://broker-2:29093
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092,PLAINTEXT_HOST://localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
 
-  broker-3:
+  kafka-3:
     image: confluentinc/cp-kafka:7.3.0
-    hostname: broker-3
-    container_name: broker-3
+    hostname: kafka-3
+    container_name: kafka-3
     networks:
       - kafka-cluster
-    ports:
-      - "9094:9094"
     depends_on:
       - zookeeper-1
       - zookeeper-2
       - zookeeper-3
+    ports:
+      - "9094:9094"
     environment:
       KAFKA_BROKER_ID: 3
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker-3:9094,PLAINTEXT_INTERNAL://broker-3:29094
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092,PLAINTEXT_HOST://localhost:9094
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
-  
+
   schema-registry:
     image: confluentinc/cp-schema-registry:7.3.0
+    hostname: schema-registry
     container_name: schema-registry
     networks:
       - kafka-cluster
     depends_on:
-      - broker-1
-      - broker-2
-      - broker-3
+      - kafka-1
+      - kafka-2
+      - kafka-3
     ports:
-      - 8081:8081
+      - "8081:8081"
     environment:
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: "zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183"
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker-1:29092,broker-2:29093,broker-3:29094'
-      SCHEMA_REGISTRY_LISTENERS: http://schema-registry:8081
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
 networks:
   kafka-cluster:
