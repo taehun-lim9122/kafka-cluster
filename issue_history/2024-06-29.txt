@@ -1,39 +1,20 @@
-카프카 클러스터를 실행했을 때 정상적으로 카프카 컨테이너가 실행되는 것으로 보였지만, 
-3개의 브로커중 랜덤한 1개의 브로커가 정상적으로 동작하지 않고
-Node 1 disconnected. (org.apache.kafka.clients.NetworkClient)
-[2024-06-28 14:13:07,128] WARN [Controller id=3, targetBrokerId=1] Connection to node 1 (localhost/127.0.0.1:9092) could not be established. Broker may not be available. (org.apache.kafka.clients.NetworkClient)
-[2024-06-28 14:13:07,128] WARN [RequestSendThread controllerId=3] Controller 3's connection to broker localhost:9092 (id: 1 rack: null) was unsuccessful (kafka.controller.RequestSendThread)
-java.io.IOException: Connection to localhost:9092 (id: 1 rack: null) failed.
-    at org.apache.kafka.clients.NetworkClientUtils.awaitReady(NetworkClientUtils.java:70)
-    at kafka.controller.RequestSendThread.brokerReady(ControllerChannelManager.scala:292)
-    at kafka.controller.RequestSendThread.doWork(ControllerChannelManager.scala:246)
-    at kafka.utils.ShutdownableThread.run(ShutdownableThread.scala:96)
-[2024-06-28 14:13:07,128] INFO [Controller id=3, targetBrokerId=1] Client requested connection close from node 1 (org.apache.kafka.clients.NetworkClient)
-와 같이 노드가 제대로 연결되지 않는 문제가 있었다.
-위 문제는 브로커간 리더 선출을 하는 과정에서 문제가 생겼거나, 브로커 컨테이너 간 통신이 제대로 되지 않아 생긴 문제로 파악되지만 정확하지는 않다.
+스키마 레지스트리 컨테이너가 동작하지 않는 것을 확인했다.
+docker logs schema-registry 커맨드를 통해 로그를 확인해보니
+org.apache.kafka.common.config.ConfigException: No supported Kafka endpoints are configured. kafkastore.bootstrap.servers must have at least one endpoint matching kafkastore.security.protocol.
+위와 같은 에러가 발생을 했다.
+해당 에러는 kafkastore.bootstrap.servers에 지정된 Kafka 엔드포인트가 없다는 것을 나타내며, 특히 kafkastore.security.protocol 설정과 일치하는 엔드포인트가 필요하다는 뜻이다.
+따라서 schema-registry 컨테이너에서 환경 설정 부분에 변경을 주었다.
+[before]
+SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: "zookeeper-1:2181,zookeeper-2:2182,zookeeper-3:2183"
+SCHEMA_REGISTRY_HOST_NAME: schema-registry
+SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
+[after]
+SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka-1:29092,kafka-2:29092,kafka-3:29092"
+SCHEMA_REGISTRY_HOST_NAME: schema-registry
+SCHEMA_REGISTRY_LISTENERS: http://schema-registry:8081
 
-또, 컨테이너 외부에서 bootstrap_server 값을 localhost:9092 로 주고 토픽 및 프로듀싱 하는 파이썬 스크립트를 실행했을 때 아래와 같은 에러가 발생했다.
-Traceback (most recent call last):
-  File "producer1.py", line 7, in <module>
-    producer = KafkaProducer(
-  File "/Users/taehun/project/kafka/venv/lib/python3.8/site-packages/kafka/producer/kafka.py", line 381, in __init__
-    client = KafkaClient(metrics=self._metrics, metric_group_prefix='producer',
-  File "/Users/taehun/project/kafka/venv/lib/python3.8/site-packages/kafka/client_async.py", line 244, in __init__
-    self.config['api_version'] = self.check_version(timeout=check_timeout)
-  File "/Users/taehun/project/kafka/venv/lib/python3.8/site-packages/kafka/client_async.py", line 900, in check_version
-    raise Errors.NoBrokersAvailable()
-kafka.errors.NoBrokersAvailable: NoBrokersAvailable
+SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL 값을 [before]과 같이 주었을 때 주키퍼를 통해 kafka-bootstrap-servers 값을 알 수 있다고 하여 위와 같이 지정을 하였지만,
+에러 로그를 확인 하면 카프카 서버를 찾지 못하여 카프카 부트스트랩 서버 값을 직접 지정해주었고 스키마 레지스트리 리스너 부분도 변경해주었다.
 
-첫 번째 이슈와 두 번째 이슈가 모두 네트워크 통신으로 인해 생긴 문제로 파악하여 원할한 네트워크 통신을 위해 아래와 같이 해결 하였다.
-
-브로커에 사용되는 confluentinc/cp-kafka:7.3.0 이미지에서
-KAFKA_ADVERTISED_LISTENERS 에 주어진 옵션 값을 변경 해주었고
-각 브로커 끼리 port 충돌이 일어나지 않게 port 값을 주었다.
-KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
-여기에서 설정 값들이 의미하는 바는 아래와 같다.
-* PLAINTEXT://kafka-1:29092: 도커 네트워크 내부의 다른 컨테이너들이 이 Kafka 브로커에 접근할 때 사용하는 주소이다.
-* PLAINTEXT_HOST://localhost:9092: 도커 컨테이너 외부의 클라이언트가 이 Kafka 브로커에 접근할 때 사용하는 주소이다.
-
-
-
+일단.. 위와 같이 변경했을 때 스키마 레지스트리가 정상적으로 작동한다. 좀 더 지켜봐야 할거 같다.
